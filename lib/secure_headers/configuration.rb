@@ -284,6 +284,30 @@ module SecureHeaders
         klass = CONFIG_ATTRIBUTES_TO_HEADER_CLASSES[attr]
         klass.validate_config!(instance_variable_get("@#{attr}"))
       end
+      validate_reporting_endpoint_references!
+    end
+
+    # Public: ensure CSP report-to names resolve to configured endpoints.
+    #
+    # Legacy configurations that only use report-to without a
+    # Reporting-Endpoints header are left alone. Once endpoints are configured,
+    # every enforced or report-only report-to reference must match one of them.
+    def validate_reporting_endpoint_references!
+      return unless @reporting_endpoints.is_a?(Hash)
+
+      endpoint_names = ReportingEndpoints.normalized_endpoints(@reporting_endpoints).map(&:first)
+
+      [@csp, @csp_report_only].compact.each do |csp_config|
+        next if csp_config == OPT_OUT
+
+        report_to = csp_config.directive_value(ContentSecurityPolicy::REPORT_TO)
+        next if report_to.nil? || endpoint_names.include?(report_to)
+
+        raise ReportingEndpointsConfigError.new(
+          "#{csp_config.class::HEADER_NAME} report_to references undefined reporting endpoint #{report_to.inspect}. " \
+          "Add it to config.reporting_endpoints."
+        )
+      end
     end
 
     def secure_cookies=(secure_cookies)

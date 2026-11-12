@@ -19,6 +19,27 @@ module SecureHeaders
       expect_default_values(env)
     end
 
+    it "merges Reporting-Endpoints without disturbing application headers" do
+      reset_config
+      reporting_app = lambda { |_env| [200, {"X-Application" => "present"}, "app"] }
+      Configuration.default do |config|
+        config.csp = {
+          default_src: %w('self'),
+          script_src: %w('self'),
+          report_to: "csp-endpoint"
+        }
+        config.reporting_endpoints = {
+          "csp-endpoint" => "https://example.com/reports"
+        }
+      end
+
+      _, headers = Middleware.new(reporting_app).call(Rack::MockRequest.env_for("https://localhost", {}))
+
+      expect(headers["X-Application"]).to eq("present")
+      expect(headers[ContentSecurityPolicyConfig::HEADER_NAME]).to include("report-to csp-endpoint")
+      expect(headers["reporting-endpoints"]).to eq('csp-endpoint="https://example.com/reports"')
+    end
+
     it "respects overrides" do
       request = Rack::Request.new("HTTP_X_FORWARDED_SSL" => "on")
       SecureHeaders.override_x_frame_options(request, "DENY")

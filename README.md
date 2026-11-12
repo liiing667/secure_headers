@@ -130,6 +130,12 @@ config.reporting_endpoints = {
 }
 ```
 
+Endpoint names must be valid structured-field keys (ASCII lowercase letters,
+digits, `_`, `-`, `.`, or `*`, starting with a letter or `*`). Endpoint URLs
+must be absolute HTTPS URIs without quotes, commas, backslashes, whitespace, or
+control characters. When `reporting_endpoints` is configured, every enforced or
+report-only `report_to` name must match one of those endpoints.
+
 **Recommendation:** Use both `report-uri` and `report-to` for maximum compatibility while transitioning to the modern approach.
 
 ### Deprecated Configuration Values

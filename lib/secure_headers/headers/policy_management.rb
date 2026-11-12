@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require_relative "reporting_endpoints"
 
 module SecureHeaders
   module PolicyManagement
@@ -407,12 +408,19 @@ module SecureHeaders
       # Private: validates that a report-to endpoint expression:
       # 1. is a string
       # 2. is not empty
+      # 3. is a valid Reporting-Endpoints dictionary key, so it can be
+      #    referenced by name without changing its spelling.
       def validate_report_to_endpoint_expression!(directive, endpoint_name)
         unless endpoint_name.is_a?(String)
           raise ContentSecurityPolicyConfigError.new("#{directive} must be a string. Found #{endpoint_name.class} value")
         end
         if endpoint_name.empty?
           raise ContentSecurityPolicyConfigError.new("#{directive} must not be empty")
+        end
+        unless ReportingEndpoints.valid_endpoint_name?(endpoint_name)
+          raise ContentSecurityPolicyConfigError.new(
+            "#{directive} must be a valid reporting endpoint name (lowercase letters, digits, \"_\", \"-\", \".\", or \"*\", starting with a letter or \"*\"), got: #{endpoint_name.inspect}"
+          )
         end
       end
 

@@ -193,6 +193,22 @@ module SecureHeaders
           ContentSecurityPolicy.validate_config!(ContentSecurityPolicyConfig.new(default_opts.merge(report_to: "csp-endpoint_name-123")))
         end.to_not raise_error
       end
+
+      it "rejects report_to names containing quotes or directive delimiters" do
+        invalid_names = [
+          'csp"endpoint',
+          "csp,endpoint",
+          "csp; script-src 'unsafe-inline' *",
+          "csp endpoint",
+          "CSP-endpoint"
+        ]
+
+        invalid_names.each do |name|
+          expect do
+            ContentSecurityPolicy.validate_config!(ContentSecurityPolicyConfig.new(default_opts.merge(report_to: name)))
+          end.to raise_error(ContentSecurityPolicyConfigError, /valid reporting endpoint name/)
+        end
+      end
     end
 
     describe "#combine_policies" do

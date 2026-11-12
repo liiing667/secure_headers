@@ -671,6 +671,41 @@ module SecureHeaders
         # report-to should come before report-uri (alphabetical order)
         expect(csp_header.index("report-to")).to be < csp_header.index("report-uri")
       end
+
+      it "overrides report_to to another configured reporting endpoint" do
+        Configuration.default do |config|
+          config.csp = {
+            default_src: %w('self'),
+            script_src: %w('self'),
+            report_to: "endpoint-1"
+          }
+          config.reporting_endpoints = {
+            "endpoint-1" => "https://example.com/endpoint-1",
+            "endpoint-2" => "https://example.com/endpoint-2"
+          }
+        end
+
+        SecureHeaders.override_content_security_policy_directives(request, report_to: "endpoint-2")
+        headers = SecureHeaders.header_hash_for(request)
+        expect(headers[ContentSecurityPolicyConfig::HEADER_NAME]).to include("report-to endpoint-2")
+        expect(headers["reporting-endpoints"]).to include('endpoint-2="https://example.com/endpoint-2"')
+      end
+
+      it "appends report_to when the named endpoint is configured" do
+        Configuration.default do |config|
+          config.csp = {
+            default_src: %w('self'),
+            script_src: %w('self')
+          }
+          config.reporting_endpoints = {
+            "new-endpoint" => "https://example.com/new-endpoint"
+          }
+        end
+
+        SecureHeaders.append_content_security_policy_directives(request, report_to: "new-endpoint")
+        headers = SecureHeaders.header_hash_for(request)
+        expect(headers[ContentSecurityPolicyConfig::HEADER_NAME]).to include("report-to new-endpoint")
+      end
     end
 
     describe "reporting_endpoints header generation" do
@@ -693,6 +728,85 @@ module SecureHeaders
 
         headers = SecureHeaders.header_hash_for(request)
         expect(headers["reporting-endpoints"]).to eq('csp-endpoint="https://example.com/reports"')
+      end
+
+      it "keeps CSP report_to and Reporting-Endpoints names traceable" do
+        Configuration.default do |config|
+          config.csp = {
+            default_src: %w('self'),
+            script_src: %w('self'),
+            report_to: "csp-endpoint"
+          }
+          config.reporting_endpoints = {
+            "csp-endpoint" => "https://example.com/reports"
+          }
+        end
+
+        headers = SecureHeaders.header_hash_for(request)
+        expect(headers[ContentSecurityPolicyConfig::HEADER_NAME]).to include("report-to csp-endpoint")
+        expect(headers["reporting-endpoints"]).to eq('csp-endpoint="https://example.com/reports"')
+      end
+
+      it "accepts matching report-only reporting references" do
+        Configuration.default do |config|
+          config.csp = {
+            default_src: %w('self'),
+            script_src: %w('self'),
+            report_to: "csp-endpoint"
+          }
+          config.csp_report_only = {
+            report_only: true,
+            default_src: %w('self'),
+            script_src: %w('self'),
+            report_to: "csp-report-only-endpoint"
+          }
+          config.reporting_endpoints = {
+            "csp-endpoint" => "https://example.com/reports",
+            "csp-report-only-endpoint" => "https://example.com/report-only-reports"
+          }
+        end
+
+        headers = SecureHeaders.header_hash_for(request)
+        expect(headers[ContentSecurityPolicyConfig::HEADER_NAME]).to include("report-to csp-endpoint")
+        expect(headers[ContentSecurityPolicyReportOnlyConfig::HEADER_NAME]).to include("report-to csp-report-only-endpoint")
+        expect(headers["reporting-endpoints"]).to include(
+          'csp-report-only-endpoint="https://example.com/report-only-reports"'
+        )
+      end
+
+      it "rejects enforced report_to references that are not configured" do
+        expect do
+          Configuration.default do |config|
+            config.csp = {
+              default_src: %w('self'),
+              script_src: %w('self'),
+              report_to: "missing-endpoint"
+            }
+            config.reporting_endpoints = {
+              "csp-endpoint" => "https://example.com/reports"
+            }
+          end
+        end.to raise_error(ReportingEndpointsConfigError, /undefined reporting endpoint/)
+      end
+
+      it "rejects report-only report_to references that are not configured" do
+        expect do
+          Configuration.default do |config|
+            config.csp = {
+              default_src: %w('self'),
+              script_src: %w('self')
+            }
+            config.csp_report_only = {
+              report_only: true,
+              default_src: %w('self'),
+              script_src: %w('self'),
+              report_to: "missing-report-only-endpoint"
+            }
+            config.reporting_endpoints = {
+              "csp-endpoint" => "https://example.com/reports"
+            }
+          end
+        end.to raise_error(ReportingEndpointsConfigError, /undefined reporting endpoint/)
       end
 
       it "includes reporting_endpoints after config.dup() is called" do
